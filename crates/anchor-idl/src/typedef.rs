@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use anchor_syn::idl::{EnumFields, IdlEnumVariant, IdlField, IdlType, IdlTypeDefinition};
+use anchor_syn::idl::{
+    EnumFields, IdlEnumVariant, IdlEvent, IdlEventField, IdlField, IdlType, IdlTypeDefinition,
+};
 use heck::ToSnakeCase;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
@@ -134,6 +136,21 @@ pub fn generate_fields(fields: &[IdlField]) -> TokenStream {
     }
 }
 
+/// Generates event fields from a list of [IdlField]s.
+pub fn generate_event_fields(fields: &[IdlEventField]) -> TokenStream {
+    let fields_rendered = fields.iter().map(|arg| {
+        let name = format_ident!("{}", arg.name.to_snake_case());
+        let type_name = crate::ty_to_rust_type(&arg.ty);
+        let stream: proc_macro2::TokenStream = type_name.parse().unwrap();
+        quote! {
+            pub #name: #stream
+        }
+    });
+    quote! {
+        #(#fields_rendered),*
+    }
+}
+
 /// Generates a struct.
 pub fn generate_struct(
     defs: &[IdlTypeDefinition],
@@ -189,6 +206,17 @@ pub fn generate_struct(
     }
 }
 
+/// Generates an event.
+pub fn generate_event(event_name: &Ident, fields: &[IdlEventField]) -> TokenStream {
+    let fields_rendered = generate_event_fields(fields);
+    quote! {
+        #[event]
+        pub struct #event_name {
+            #fields_rendered
+        }
+    }
+}
+
 /// Generates an enum.
 pub fn generate_enum(
     defs: &[IdlTypeDefinition],
@@ -239,6 +267,17 @@ pub fn generate_typedefs(
                 generate_enum(typedefs, &struct_name, variants)
             }
         }
+    });
+    quote! {
+        #(#defined)*
+    }
+}
+
+/// Generates events.
+pub fn generate_events(events: &[IdlEvent]) -> TokenStream {
+    let defined = events.iter().map(|evt| {
+        let event_name = format_ident!("{}", evt.name);
+        generate_event(&event_name, &evt.fields)
     });
     quote! {
         #(#defined)*
